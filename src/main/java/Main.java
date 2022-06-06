@@ -1,6 +1,10 @@
 import akka.NotUsed;
 import akka.actor.typed.ActorSystem;
 import akka.actor.typed.javadsl.Behaviors;
+import akka.stream.ClosedShape;
+import akka.stream.FlowShape;
+import akka.stream.SinkShape;
+import akka.stream.SourceShape;
 import akka.stream.javadsl.*;
 
 import java.time.Duration;
@@ -55,16 +59,39 @@ public class Main {
         //sink - as soon as 1 value is received return it as a materialized value, and terminate the stream
         Sink<VehicleSpeed, CompletionStage<VehicleSpeed>> sink = Sink.head();
 
-        CompletionStage<VehicleSpeed> result = source
-                .async()
-                .via(vehicleIds)
-                .async()
-                .via(vehiclePosition)
-                .async()
-                .via(vehicleSpeeds)
-                .via(speedFilter)
-                .toMat(sink, Keep.right())
-                .run(actorSystem);
+//        CompletionStage<VehicleSpeed> result = source
+//                .async()
+//                .via(vehicleIds)
+//                .async()
+//                .via(vehiclePosition)
+//                .async()
+//                .via(vehicleSpeeds)
+//                .via(speedFilter)
+//                .toMat(sink, Keep.right())
+//                .run(actorSystem);
+
+        RunnableGraph<CompletionStage<VehicleSpeed>> graph = RunnableGraph.fromGraph(
+                GraphDSL.create(sink , (builder, out) ->{
+                    SourceShape<String> sourceShape = builder.add(source);
+                    FlowShape<String, Integer> vehicleIdsShape = builder.add(vehicleIds);
+                    FlowShape<Integer, VehiclePositionMessage> vehiclePositionsShape = builder.add(vehiclePosition);
+                    FlowShape<VehiclePositionMessage, VehicleSpeed> vehicleSpeedShape = builder.add(vehicleSpeeds);
+                    FlowShape<VehicleSpeed, VehicleSpeed> speedFilterShape = builder.add(speedFilter);
+                    //DON'T NEED TO DO THIS - OUT IS OUR SINKSHAPE
+//                    SinkShape<VehicleSpeed> out = builder.add(sink);
+
+                    builder.from(sourceShape)
+                            .via(vehicleIdsShape)
+                            .via(vehiclePositionsShape)
+                            .via(vehicleSpeedShape)
+                            .via(speedFilterShape)
+                            .to(out);
+
+                    return ClosedShape.getInstance();
+                })
+        );
+
+        CompletionStage<VehicleSpeed> result = graph.run(actorSystem);
 
         result.whenComplete((value, throwable)->{
             if(throwable != null){
