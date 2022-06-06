@@ -74,7 +74,7 @@ public class Main {
                 GraphDSL.create(sink , (builder, out) ->{
                     SourceShape<String> sourceShape = builder.add(source);
                     FlowShape<String, Integer> vehicleIdsShape = builder.add(vehicleIds);
-                    FlowShape<Integer, VehiclePositionMessage> vehiclePositionsShape = builder.add(vehiclePosition);
+                    FlowShape<Integer, VehiclePositionMessage> vehiclePositionsShape = builder.add(vehiclePosition.async());
                     FlowShape<VehiclePositionMessage, VehicleSpeed> vehicleSpeedShape = builder.add(vehicleSpeeds);
                     FlowShape<VehicleSpeed, VehicleSpeed> speedFilterShape = builder.add(speedFilter);
                     //DON'T NEED TO DO THIS - OUT IS OUR SINKSHAPE
@@ -82,10 +82,13 @@ public class Main {
 
                     builder.from(sourceShape)
                             .via(vehicleIdsShape)
-                            .via(vehiclePositionsShape)
-                            .via(vehicleSpeedShape)
+                            .via(vehiclePositionsShape);
+
+                    builder.from(vehicleSpeedShape)
                             .via(speedFilterShape)
                             .to(out);
+
+                    builder.from(vehiclePositionsShape).via(vehicleSpeedShape);
 
                     return ClosedShape.getInstance();
                 })
